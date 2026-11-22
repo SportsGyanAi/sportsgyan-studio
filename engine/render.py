@@ -118,7 +118,7 @@ def build_scene(sc):
     L = {}
     title, sub = sc.get("title", ""), sc.get("sub", "")
     kind = sc.get("type", "point")
-    if sc.get("kicker"):
+    if clean(sc.get("kicker", "")):
         L["kicker"] = text_layer(sc["kicker"].upper() if not is_hindi(sc["kicker"]) else sc["kicker"],
                                  fk(sc["kicker"], "black", "hi_bold"), 46, fill=(10, 10, 20), glow=None)
     if title:
