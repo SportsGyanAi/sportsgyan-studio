@@ -1,0 +1,8 @@
+{"id":"demo","slug":"pant-128-demo","format":"reel",
+ "cover":{"tag":"RECORD ALERT","title":"PANT KA TOOFAN","big":"128","sub":"Stokes ke baad sirf Pant!"},
+ "scenes":[
+  {"type":"hook","kicker":"BREAKING","title":"पंत का तूफ़ान!","voice":"वेलिंगटन में आज ऋषभ पंत ने गेंदबाज़ों की धज्जियाँ उड़ा दीं!"},
+  {"type":"stat","kicker":"WELLINGTON TEST","title":"RISHABH PANT","number":"128","unit":"RUNS","sub":"153 गेंद • 10 चौके • 6 छक्के","voice":"सिर्फ़ एक सौ तिरपन गेंदों में एक सौ अट्ठाईस रन, दस चौके और छह छक्के."},
+  {"type":"record","kicker":"MOST TEST SIXES","title":"टॉप पर कौन?","rows":[["Ben Stokes","—"],["Rishabh Pant","—"],["B McCullum","107"]],"highlight":1,"voice":"इस पारी के साथ पंत ने मैकुलम को पीछे छोड़ा. अब उनसे आगे सिर्फ़ बेन स्टोक्स हैं."},
+  {"type":"cta","title":"FOLLOW करो","sub":"The Sports Gyan AI","voice":"ऐसी ही क्रिकेट खबरों के लिए, फ़ॉलो करो, द स्पोर्ट्स ज्ञान ए आई!"}
+ ]}
