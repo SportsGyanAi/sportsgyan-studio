@@ -194,7 +194,8 @@ def kicker_box(layer):
     box.alpha_composite(layer, (15, 2)); return box
 
 def number_layer(val, unit, glow):
-    return text_layer(f"{val}{(' ' + unit) if unit else ''}", "head", 260, fill=C_WHITE, glow=glow, glow_r=30, stroke=3)
+    txt = f"{val}{(' ' + unit) if unit else ''}"
+    return text_layer(txt, fk(txt, "head", "hi_bold"), 260, fill=C_WHITE, glow=glow, glow_r=30, stroke=3)
 
 def caption_chunks(text, n=4):
     w = [x for x in text.replace(",", " ").replace(".", " ").replace("!", " ").split() if x]; out = []
