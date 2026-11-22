@@ -1,0 +1,5 @@
+omnivoice
+soundfile
+numpy
+pillow>=10
+edge-tts
