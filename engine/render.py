@@ -36,6 +36,7 @@ def text_layer(text, fname, size, fill=C_WHITE, glow=C_NEON, glow_r=18, stroke=0
         if f.getlength(t) <= max_w or not cur: cur = t
         else: lines.append(cur); cur = w
     if cur: lines.append(cur)
+    if not lines: return Image.new("RGBA", (2, 2), (0, 0, 0, 0))  # emoji-only / empty text
     lh = int(size * (1.25 if fname.startswith("hi") else 1.08))
     tw = int(max(f.getlength(l) for l in lines)) + 2 * glow_r + 20
     th = lh * len(lines) + 2 * glow_r + 20
