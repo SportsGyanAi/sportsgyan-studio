@@ -26,7 +26,8 @@ def fk(s, latin="head", hindi="hi_bold"): return hindi if is_hindi(s) else latin
 # ---------- text with neon glow ----------
 import re as _re
 _EMOJI = _re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\uFE0F\u200d]+")
-def clean(t): return _EMOJI.sub("", str(t)).strip()
+from .hindi_text import for_screen
+def clean(t): return for_screen(_EMOJI.sub("", str(t)))
 
 def text_layer(text, fname, size, fill=C_WHITE, glow=C_NEON, glow_r=18, stroke=0, max_w=W - 140, align="center"):
     f = font(fname, size); text = clean(text) or " "
@@ -62,16 +63,41 @@ def paste(canvas, layer, cx, cy, alpha=1.0, scale=1.0):
     canvas.alpha_composite(layer, (int(cx - layer.width / 2), int(cy - layer.height / 2)))
 
 # ---------- background ----------
-def load_bg(src):
+def grade(im, warm=0.5):
+    """Cinematic teal-orange grade + clarity, the 'edited' look for real match photos."""
+    a = np.asarray(im).astype(np.float32) / 255.0
+    lum = a.mean(2, keepdims=True)
+    shadows, highs = np.clip(1 - lum * 2, 0, 1), np.clip(lum * 2 - 1, 0, 1)
+    a = a + shadows * np.array([-0.04, 0.03, 0.07]) * 1.2 + highs * np.array([0.07, 0.03, -0.04]) * (0.6 + warm)
+    a = np.clip((a - 0.5) * 1.12 + 0.5, 0, 1)
+    out = Image.fromarray((a * 255).astype(np.uint8))
+    out = out.filter(ImageFilter.UnsharpMask(radius=3, percent=60, threshold=3))
+    return ImageEnhance.Color(out).enhance(1.08)
+
+def load_bg(src, seed=0):
     p = Path(src) if src else None
-    if not p or not p.exists():
+    rnd = random.Random(seed)
+    real = bool(p and p.exists())
+    if not real:
         cands = sorted(BG.glob("*.png")) + sorted(BG.glob("*.jpg"))
-        p = random.choice(cands)
+        p = cands[seed % len(cands)]
     im = Image.open(p).convert("RGB")
+    if not real:  # vary generic art: mirror, crop window, hue shift
+        if rnd.random() < 0.5: im = ImageOps.mirror(im)
+        w, h = im.size; cw, ch = int(w * rnd.uniform(0.75, 1)), int(h * rnd.uniform(0.75, 1))
+        x, y = rnd.randint(0, w - cw), rnd.randint(0, h - ch); im = im.crop((x, y, x + cw, y + ch))
+        hsv = np.asarray(im.convert("HSV")).copy(); hsv[..., 0] = (hsv[..., 0].astype(int) + rnd.randint(-18, 18)) % 256
+        im = Image.fromarray(hsv, "HSV").convert("RGB")
+    elif im.width > im.height * 0.8:  # landscape press photo: blurred fill + sharp photo, keeps the players in frame
+        fill = ImageOps.fit(im, (int(W * 1.18), int(H * 1.18)), Image.LANCZOS).filter(ImageFilter.GaussianBlur(28))
+        fg = ImageOps.fit(im, (int(W * 1.18), int(W * 1.18 * 1.25)), Image.LANCZOS, centering=(0.5, 0.35))
+        fill.paste(fg, (0, int(H * 1.18 * 0.12)))
+        mask = Image.new("L", fg.size, 255); d = ImageDraw.Draw(mask)
+        for i in range(140): d.rectangle([0, i, fg.width, i + 1], fill=int(255 * i / 140)); d.rectangle([0, fg.height - 1 - i, fg.width, fg.height - i], fill=int(255 * i / 140))
+        base = ImageOps.fit(im, (int(W * 1.18), int(H * 1.18)), Image.LANCZOS).filter(ImageFilter.GaussianBlur(28))
+        base.paste(fg, (0, int(H * 1.18 * 0.12)), mask); im = base
     im = ImageOps.fit(im, (int(W * 1.18), int(H * 1.18)), Image.LANCZOS)
-    # pro grade: contrast, slight desat, cool shadows
-    im = ImageEnhance.Contrast(im).enhance(1.12); im = ImageEnhance.Color(im).enhance(0.9)
-    return im
+    return grade(im, warm=rnd.random()) if real else ImageEnhance.Contrast(im).enhance(1.1)
 
 def bg_frame(im, t, seed):
     """Smooth Ken Burns: eased zoom 1.0->1.07 and gentle pan, sub-pixel via affine."""
@@ -101,6 +127,26 @@ def light_streak():
     return s.filter(ImageFilter.GaussianBlur(30)).rotate(-28, expand=True, resample=Image.BICUBIC)
 
 @lru_cache(None)
+def light_leak():
+    l = Image.new("RGBA", (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(l)
+    d.ellipse([-300, -200, 700, 900], fill=(255, 140, 40, 120)); d.ellipse([500, 1100, 1500, 2200], fill=(255, 60, 120, 90))
+    return l.filter(ImageFilter.GaussianBlur(160))
+
+@lru_cache(None)
+def logo():
+    """Brand logo: neon ring + cricket ball + wordmark (procedural, no external file)."""
+    S = 520; im = Image.new("RGBA", (S, S), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
+    for r, a in ((250, 60), (240, 255)):
+        d.ellipse([S / 2 - r, S / 2 - r, S / 2 + r, S / 2 + r], outline=C_NEON + (a,), width=14 if a == 255 else 40)
+    im = im.filter(ImageFilter.GaussianBlur(2)); d = ImageDraw.Draw(im)
+    br = 120; cx = cy = S / 2
+    d.ellipse([cx - br, cy - br, cx + br, cy + br], fill=(200, 20, 40, 255))
+    d.arc([cx - br * 1.6, cy - br, cx + br * 0.4, cy + br], -60, 60, fill=(255, 235, 235, 255), width=6)
+    d.arc([cx - br * 0.4, cy - br, cx + br * 1.6, cy + br], 120, 240, fill=(255, 235, 235, 255), width=6)
+    d.ellipse([cx - br * 0.55, cy - br * 0.75, cx - br * 0.1, cy - br * 0.35], fill=(255, 255, 255, 90))
+    return im
+
+@lru_cache(None)
 def brand_tag():
     return text_layer(BRAND, "bold", 34, fill=C_WHITE, glow=C_NEON, glow_r=8)
 
@@ -121,6 +167,11 @@ def build_scene(sc):
     if clean(sc.get("kicker", "")):
         L["kicker"] = text_layer(sc["kicker"].upper() if not is_hindi(sc["kicker"]) else sc["kicker"],
                                  fk(sc["kicker"], "black", "hi_bold"), 46, fill=(10, 10, 20), glow=None)
+    if kind == "cta":
+        L["logo"] = logo()
+        L["word"] = text_layer(BRAND, "head", 104, glow=C_NEON, glow_r=20, stroke=2)
+        L["follow"] = text_layer("FOLLOW करो", "hi_bold", 64, fill=(10, 10, 20), glow=None)
+        return L
     if title:
         L["title"] = text_layer(title if is_hindi(title) else title.upper(), fk(title), 120 if kind in ("hook", "cta") else 100,
                                 glow=C_HOT if kind == "hook" else C_NEON, glow_r=22, stroke=2)
@@ -145,7 +196,7 @@ def kicker_box(layer):
 def number_layer(val, unit, glow):
     return text_layer(f"{val}{(' ' + unit) if unit else ''}", "head", 260, fill=C_WHITE, glow=glow, glow_r=30, stroke=3)
 
-def caption_chunks(text, n=3):
+def caption_chunks(text, n=4):
     w = [x for x in text.replace(",", " ").replace(".", " ").replace("!", " ").split() if x]; out = []
     for i in range(0, len(w), n): out.append(" ".join(w[i:i + n]))
     return out
@@ -157,7 +208,12 @@ def draw_frame(sc, L, bgim, t, dur, t_abs, idx, total_dur):
     st = light_streak(); sx = -st.width + (W + st.width) * ((t_abs * 0.12 + idx * 0.37) % 1.4) / 1.4
     frame.alpha_composite(st, (int(sx), int(H * 0.25)))
     particles(frame, t_abs)
-    kind = sc.get("type", "point")
+    kind = sc.get("type", "point"); fx = sc.get("fx") or ("glitch" if kind == "hook" else ["flash", "whip", "zoom", "leak"][idx % 4])
+    if fx == "leak" or kind in ("hook", "record"):
+        ll = light_leak().copy(); ll.putalpha(ll.split()[3].point(lambda v: int(v * (0.55 + 0.45 * math.sin(t_abs * 1.3)))))
+        frame.alpha_composite(ll)
+    if kind == "cta":
+        return outro(frame, L, t, dur, t_abs)
     # punch-in scale at scene start
     punch = 1 + 0.06 * (1 - ease_out(t / 0.35))
     y = H * 0.36
@@ -165,6 +221,7 @@ def draw_frame(sc, L, bgim, t, dur, t_abs, idx, total_dur):
         a = ease_out(t / 0.3); paste(frame, kicker_box(L["kicker"]), W / 2 - (1 - a) * 300, y - 170, a)
     if "title" in L:
         a = ease_out((t - 0.08) / 0.35); s = ease_back((t - 0.08) / 0.45) if t < 0.53 else 1
+        if kind == "hook": a = ease_out(t / 0.12); s = 1 + 1.4 * (1 - ease_out(t / 0.28))  # SLAM in
         pulse = 1 + 0.012 * math.sin(t_abs * 4)
         paste(frame, L["title"], W / 2, y + (1 - a) * 80, a, max(0.01, s * punch * pulse))
         y += L["title"].height / 2 + 40
@@ -173,7 +230,8 @@ def draw_frame(sc, L, bgim, t, dur, t_abs, idx, total_dur):
         k = ease_out((t - 0.2) / 0.9)
         shown = (f"{int(round(target * k)):,}" if target is not None and "." not in num else num) if k < 1 else num
         nl = number_layer(shown, sc.get("unit", ""), C_GOLD)
-        paste(frame, nl, W / 2, y + nl.height / 2, ease_out((t - 0.15) / 0.25), 1 + 0.08 * (1 - ease_out((t - 1.1) / 0.3)) if t > 1.1 else 1)
+        sh = 10 * math.sin(t * 90) * max(0, 1 - abs(t - 1.15) / 0.15) if 1.0 < t < 1.3 else 0
+        paste(frame, nl, W / 2 + sh, y + nl.height / 2, ease_out((t - 0.15) / 0.25), 1 + 0.08 * (1 - ease_out((t - 1.1) / 0.3)) if t > 1.1 else 1)
         y += nl.height + 10
     if "rows" in L:
         for i, row in enumerate(L["rows"]):
@@ -182,34 +240,75 @@ def draw_frame(sc, L, bgim, t, dur, t_abs, idx, total_dur):
         y += 128 * len(L["rows"]) + 40
     if "sub" in L:
         a = ease_out((t - 0.45) / 0.4); paste(frame, L["sub"], W / 2, max(y + 40, H * 0.60) + (1 - a) * 40, a)
-    # captions (synced chunks of the voice line)
+    draw_captions(frame, sc, p)
+    return finish(frame, fx, t, idx)
+
+def draw_captions(frame, sc, p):
+    """Small karaoke captions low on screen: chunk slides up, the spoken word lights up gold."""
     chunks = sc.get("_chunks") or []
-    if chunks:
-        ci = min(len(chunks) - 1, int(p * len(chunks)))
-        cl = caption_layer(chunks[ci])
-        cp = (p * len(chunks)) % 1
-        paste(frame, cl, W / 2, H * 0.80, 1, 1 + 0.05 * (1 - ease_out(cp / 0.15)))
-    # top HUD: progress + brand
-    d = ImageDraw.Draw(frame)
-    d.rounded_rectangle([60, 70, W - 60, 80], 5, fill=(255, 255, 255, 50))
-    d.rounded_rectangle([60, 70, 60 + (W - 120) * (t_abs / total_dur), 80], 5, fill=C_NEON + (255,))
-    paste(frame, brand_tag(), W / 2, 130, 0.85)
-    # flash transition
-    if t < 0.12 and idx > 0:
-        fl = Image.new("RGBA", (W, H), (255, 255, 255, int(200 * (1 - t / 0.12)))); frame.alpha_composite(fl)
-    if kind == "hook" and t < 0.5:  # RGB split glitch on hook only
+    if not chunks: return
+    vt = clamp((p * sc["_dur"] - sc.get("_lead", 0.25)) / max(0.1, sc["_dur"] - 0.6))
+    ci = min(len(chunks) - 1, int(vt * len(chunks)))
+    cp = vt * len(chunks) - ci
+    words = chunks[ci].split(); wi = min(len(words) - 1, int(cp * len(words)))
+    cl = caption_layer(chunks[ci], wi)
+    a = ease_out(cp / 0.12)
+    paste(frame, cl, W / 2, H * 0.835 + (1 - a) * 30, a)
+
+def finish(frame, fx, t, idx):
+    if idx > 0 and t < 0.18:
+        k = 1 - t / 0.18
+        if fx == "flash":
+            frame.alpha_composite(Image.new("RGBA", (W, H), (255, 255, 255, int(210 * k))))
+        elif fx == "whip":
+            off = int(W * 0.35 * k ** 2); frame = ImageChops_offset_rgba(frame, off).filter(ImageFilter.BoxBlur(int(1 + 18 * k)))
+        elif fx == "zoom":
+            z = 1 + 0.18 * k ** 2; c = frame.resize((int(W * z), int(H * z)), Image.BILINEAR)
+            frame = c.crop(((c.width - W) // 2, (c.height - H) // 2, (c.width - W) // 2 + W, (c.height - H) // 2 + H))
+        elif fx == "leak":
+            frame.alpha_composite(Image.new("RGBA", (W, H), (255, 170, 80, int(150 * k))))
+    if (fx == "glitch" and t < 0.5) or (idx > 0 and t < 0.12 and fx == "glitch"):  # RGB split glitch
         r, g, b, a = frame.split(); off = int(14 * (1 - t / 0.5))
         frame = Image.merge("RGBA", (ImageChops_offset(r, off), g, ImageChops_offset(b, -off), a))
     return frame.convert("RGB")
+
+def outro(frame, L, t, dur, t_abs):
+    """Animated brand outro: logo spins in, wordmark reveals, FOLLOW pill pulses."""
+    a = ease_out(t / 0.5); s = ease_back(t / 0.6) if t < 0.6 else 1 + 0.02 * math.sin(t_abs * 3)
+    lg = L["logo"].rotate(-360 * (1 - ease_out(t / 0.8)), resample=Image.BICUBIC)
+    paste(frame, lg, W / 2, H * 0.36, a, max(0.01, s))
+    wa = ease_out((t - 0.45) / 0.5)
+    word = L["word"]
+    if wa < 1:  # wipe reveal
+        cut = word.crop((0, 0, max(1, int(word.width * wa)), word.height)); pad = Image.new("RGBA", word.size, (0, 0, 0, 0)); pad.alpha_composite(cut); word = pad
+    paste(frame, word, W / 2, H * 0.56, wa)
+    fa = ease_out((t - 0.9) / 0.4)
+    pill = Image.new("RGBA", (L["follow"].width + 90, L["follow"].height + 30), (0, 0, 0, 0))
+    ImageDraw.Draw(pill).rounded_rectangle([0, 0, pill.width - 1, pill.height - 1], pill.height // 2, fill=C_GOLD + (255,))
+    pill.alpha_composite(L["follow"], (45, 15))
+    paste(frame, pill, W / 2, H * 0.66 + (1 - fa) * 60, fa, 1 + 0.05 * math.sin(t_abs * 6) * fa)
+    return frame.convert("RGB")
+
+def ImageChops_offset_rgba(im, dx):
+    from PIL import ImageChops
+    return Image.merge("RGBA", [ImageChops.offset(c, dx, 0) for c in im.split()])
 
 def ImageChops_offset(ch, dx):
     from PIL import ImageChops
     return ImageChops.offset(ch, dx, 0)
 
-@lru_cache(256)
-def caption_layer(txt):
-    return text_layer(txt, fk(txt, "black", "hi_bold"), 72, fill=C_GOLD if is_hindi(txt) else C_WHITE,
-                      glow=(0, 0, 0), glow_r=10, stroke=4)
+@lru_cache(512)
+def caption_layer(txt, hi_word=-1):
+    """One caption line, 52px, white words with the current word in gold, soft dark backing."""
+    words = clean(txt).split(); fn = font(fk(txt, "black", "hi_bold"), 52)
+    gap = 16; widths = [fn.getlength(w) for w in words]; tw = int(sum(widths) + gap * (len(words) - 1)) + 60
+    th = 92; im = Image.new("RGBA", (max(tw, 2), th), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
+    d.rounded_rectangle([0, 6, im.width - 1, th - 6], 22, fill=(0, 0, 0, 120))
+    x = 30
+    for i, (w, wd) in enumerate(zip(words, widths)):
+        d.text((x, th / 2), w, font=fn, fill=C_GOLD if i == hi_word else C_WHITE, anchor="lm", stroke_width=3, stroke_fill=(0, 0, 0))
+        x += wd + gap
+    return im
 
 # ---------- audio ----------
 def mix_audio(scenes, starts, total, vo_files, out_wav):
@@ -257,7 +356,7 @@ def render(job, workdir, tts_speak, tts_dur):
                            "-pix_fmt", "yuv420p", "-profile:v", "high", "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
                            "-movflags", "+faststart", "-shortest", str(out)], stdin=subprocess.PIPE)
     for i, sc in enumerate(scenes):
-        L = build_scene(sc); bgim = load_bg(sc.get("image_path"))
+        L = build_scene(sc); bgim = load_bg(sc.get("image_path"), seed=hash(job.get("slug", "")) % 997 + i)
         nf = int(round(sc["_dur"] * FPS))
         for f in range(nf):
             tt = f / FPS
