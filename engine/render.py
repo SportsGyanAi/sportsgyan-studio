@@ -24,8 +24,12 @@ def is_hindi(s): return any("\u0900" <= ch <= "\u097F" for ch in s)
 def fk(s, latin="head", hindi="hi_bold"): return hindi if is_hindi(s) else latin
 
 # ---------- text with neon glow ----------
+import re as _re
+_EMOJI = _re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\uFE0F\u200d]+")
+def clean(t): return _EMOJI.sub("", str(t)).strip()
+
 def text_layer(text, fname, size, fill=C_WHITE, glow=C_NEON, glow_r=18, stroke=0, max_w=W - 140, align="center"):
-    f = font(fname, size)
+    f = font(fname, size); text = clean(text) or " "
     lines, cur = [], ""
     for w in text.split():
         t = (cur + " " + w).strip()
