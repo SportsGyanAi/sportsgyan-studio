@@ -18,7 +18,7 @@ def make_cover(cv, out):
     paste(im, band, W / 2, top + 520)
     paste(im, t, W / 2, top + 520)
     if cv.get("big"):
-        b = text_layer(cv["big"], "head", 300, fill=C_GOLD, glow=C_NEON, glow_r=30, stroke=3)
+        b = text_layer(cv["big"], fk(cv["big"], "head", "hi_bold"), 300 if not is_hindi(cv["big"]) and len(cv["big"]) <= 6 else 120, fill=C_GOLD, glow=C_NEON, glow_r=30, stroke=3)
         paste(im, b, W / 2, top + 520 + t.height / 2 + b.height / 2 - 20)
     if cv.get("sub"):
         s = text_layer(cv["sub"], fk(cv["sub"], "bold", "hi_bold"), 64, glow=None, stroke=3)
