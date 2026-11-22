@@ -12,6 +12,10 @@ def make_cover(cv, out):
         box = Image.new("RGBA", (tg.width + 30, tg.height), C_HOT + (255,)); box.alpha_composite(tg, (15, 0))
         paste(im, box, W / 2, top + 150)
     t = text_layer(cv["title"] if is_hindi(cv["title"]) else cv["title"].upper(), fk(cv["title"]), 150, glow=C_HOT, glow_r=26, stroke=3)
+    band = Image.new("RGBA", (W + 200, t.height + 10), (0, 0, 0, 0))
+    ImageDraw.Draw(band).polygon([(80, 0), (W + 200, 0), (W + 120, band.height), (0, band.height)], fill=(8, 10, 22, 190))
+    band = band.rotate(4, expand=True, resample=Image.BICUBIC)
+    paste(im, band, W / 2, top + 520)
     paste(im, t, W / 2, top + 520)
     if cv.get("big"):
         b = text_layer(cv["big"], "head", 300, fill=C_GOLD, glow=C_NEON, glow_r=30, stroke=3)
