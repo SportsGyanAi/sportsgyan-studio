@@ -7,6 +7,15 @@ from .cover import make_cover
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 log = logging.getLogger("run")
 
+def is_graphic(path):
+    """True for infographics / text cards (lots of flat white or flat colour), which look bad as a background."""
+    from PIL import Image
+    import numpy as np
+    a = np.asarray(Image.open(path).convert("RGB").resize((160, 90))).astype(int)
+    white = ((a > 225).all(2)).mean()
+    flat = (np.abs(np.diff(a, axis=1)).sum(2) < 6).mean()
+    return white > 0.25 or flat > 0.6
+
 def fetch_images(job, workdir):
     """Download per-scene/cover images (match photos supplied by the Brain)."""
     for i, item in enumerate(job["scenes"] + [job.get("cover", {})]):
@@ -15,7 +24,9 @@ def fetch_images(job, workdir):
             p = Path(workdir) / f"img_{i:02d}.jpg"
             try:
                 req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                p.write_bytes(urllib.request.urlopen(req, timeout=30).read()); item["image_path"] = str(p)
+                p.write_bytes(urllib.request.urlopen(req, timeout=30).read())
+                if is_graphic(p): log.info("skip text-graphic image %s", url); continue
+                item["image_path"] = str(p)
             except Exception as e: log.warning("image fail %s: %s", url, e)
 
 def run_job(job, outdir):
