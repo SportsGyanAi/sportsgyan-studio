@@ -1,0 +1,42 @@
+name: render
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # poll the Brain for new jobs
+  workflow_dispatch:
+  repository_dispatch:
+    types: [render]
+concurrency: { group: render, cancel-in-progress: false }
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Any job waiting?
+        id: peek
+        run: |
+          n=$(curl -s -H "Authorization: Bearer ${{ secrets.BRAIN_KEY }}" ${{ vars.BRAIN_URL }}/api/jobs/pending | jq -r '.count // 0')
+          echo "count=$n" >> $GITHUB_OUTPUT
+      - uses: actions/checkout@v4
+        if: steps.peek.outputs.count != '0'
+      - uses: actions/setup-python@v5
+        if: steps.peek.outputs.count != '0'
+        with: { python-version: "3.11", cache: pip }
+      - name: System deps
+        if: steps.peek.outputs.count != '0'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg libraqm0 libfribidi0 libharfbuzz0b
+      - name: Cache OmniVoice model
+        if: steps.peek.outputs.count != '0'
+        uses: actions/cache@v4
+        with: { path: ~/.cache/huggingface, key: hf-omnivoice-v1 }
+      - name: Python deps
+        if: steps.peek.outputs.count != '0'
+        run: |
+          pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+      - name: Render
+        if: steps.peek.outputs.count != '0'
+        env:
+          BRAIN_URL: ${{ vars.BRAIN_URL }}
+          BRAIN_KEY: ${{ secrets.BRAIN_KEY }}
+          SG_TTS: omnivoice
+        run: python -m engine.run --poll
