@@ -1,6 +1,7 @@
 """Hindi voiceover. Primary: OmniVoice (k2-fsa). Fallback: edge-tts so a reel never fails."""
 import asyncio, subprocess, os, logging
 from pathlib import Path
+from .hindi_text import for_voice
 log = logging.getLogger("tts")
 _MODEL = None
 VOICE_INSTRUCT = os.getenv("SG_VOICE_INSTRUCT", "male, young adult, moderate pitch")
@@ -19,7 +20,7 @@ def _omnivoice(text, out):
     if _MODEL is None:
         _MODEL = OmniVoice.from_pretrained("k2-fsa/OmniVoice", device_map="cpu", dtype=torch.float32)
         _MODEL.eval()
-    cfg = OmniVoiceGenerationConfig(num_step=24, guidance_scale=2.0)
+    cfg = OmniVoiceGenerationConfig(num_step=32, guidance_scale=2.0)
     kw = dict(text=text, generation_config=cfg)
     if REF_AUDIO and Path(REF_AUDIO).exists():
         kw.update(ref_audio=REF_AUDIO, ref_text=REF_TEXT)
@@ -39,6 +40,7 @@ async def _edge(text, out, voice="hi-IN-MadhurNeural"):
     _to_wav48(tmp, out); tmp.unlink(missing_ok=True)
 
 def speak(text, out, engine=os.getenv("SG_TTS", "omnivoice")):
+    text = for_voice(text)
     if engine == "omnivoice":
         try:
             _omnivoice(text, out); return "omnivoice"
