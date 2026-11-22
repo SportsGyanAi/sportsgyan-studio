@@ -7,7 +7,7 @@ KEY = os.environ["BRAIN_KEY"]
 def call(method, path, body=None, raw=None, ctype="application/json"):
     data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
     req = urllib.request.Request(BRAIN + path, data=data, method=method,
-                                 headers={"Authorization": f"Bearer {KEY}", "Content-Type": ctype})
+                                 headers={"Authorization": f"Bearer {KEY}", "Content-Type": ctype, "User-Agent": "sportsgyan-studio/1.0"})
     for attempt in range(4):
         try:
             with urllib.request.urlopen(req, timeout=120) as r:
