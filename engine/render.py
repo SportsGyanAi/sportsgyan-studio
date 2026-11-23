@@ -9,7 +9,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance, ImageOps
 from .config import W, H, FPS, SR, FONT, BG, BRAND, C_NEON, C_HOT, C_GOLD, C_WHITE, C_BG
-from . import sfx
+from . import sfx, hero
+import os
 
 # ---------- easing ----------
 def clamp(x, a=0.0, b=1.0): return max(a, min(b, x))
@@ -204,6 +205,10 @@ def caption_chunks(text, n=4):
 
 def draw_frame(sc, L, bgim, t, dur, t_abs, idx, total_dur):
     p = t / dur
+    if L.get("hero"):  # broadcast player hero card (own background, cutout, lower third)
+        fr = hero.frame(L["hero"], kicker_box(L["kicker"]) if "kicker" in L else None, t, dur, t_abs)
+        draw_captions(fr, sc, p)
+        return finish(fr, sc.get("fx") or ["whip", "flash", "zoom"][idx % 3], t, idx)
     frame = bg_frame(bgim, p, idx).convert("RGBA")
     frame.alpha_composite(overlay())
     st = light_streak(); sx = -st.width + (W + st.width) * ((t_abs * 0.12 + idx * 0.37) % 1.4) / 1.4
@@ -338,6 +343,17 @@ def mix_audio(scenes, starts, total, vo_files, out_wav):
     mix = mix / (np.abs(mix).max() + 1e-9) * 0.95
     sf.write(out_wav, mix, SR)
 
+# ---------- style rotation ----------
+def pick_hero(scenes, seed):
+    """Hero card on at most 2 photo scenes per reel, alternating by seed so reels differ.
+    A scene can force it with look='hero' or block it with look='plain'; SG_HERO=0 turns it off."""
+    if os.environ.get("SG_HERO") == "0": return
+    ok = [i for i, sc in enumerate(scenes) if sc.get("image_path") and not sc.get("rows")
+          and sc.get("type", "point") not in ("cta",) and sc.get("look") != "plain"]
+    forced = [i for i in ok if scenes[i].get("look") == "hero"]
+    chosen = forced or [i for k, i in enumerate(ok) if (k + seed) % 2 == 0][:2]
+    for i in chosen: scenes[i]["_hero"] = True
+
 # ---------- main ----------
 def render(job, workdir, tts_speak, tts_dur):
     workdir = Path(workdir); workdir.mkdir(parents=True, exist_ok=True)
@@ -356,8 +372,13 @@ def render(job, workdir, tts_speak, tts_dur):
                            "-r", str(FPS), "-i", "-", "-i", str(audio), "-c:v", "libx264", "-preset", "medium", "-crf", "19",
                            "-pix_fmt", "yuv420p", "-profile:v", "high", "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
                            "-movflags", "+faststart", "-shortest", str(out)], stdin=subprocess.PIPE)
+    pick_hero(scenes, hash(job.get("slug", "")) % 2)
     for i, sc in enumerate(scenes):
-        L = build_scene(sc); bgim = load_bg(sc.get("image_path"), seed=hash(job.get("slug", "")) % 997 + i)
+        L = build_scene(sc)
+        if sc.get("_hero"):
+            try: L["hero"] = hero.build(sc, sc["image_path"], text_layer, font, fk, clean, is_hindi)
+            except Exception as e: print("hero skipped:", e)
+        bgim = load_bg(sc.get("image_path"), seed=hash(job.get("slug", "")) % 997 + i)
         nf = int(round(sc["_dur"] * FPS))
         for f in range(nf):
             tt = f / FPS
