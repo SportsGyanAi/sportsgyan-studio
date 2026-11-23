@@ -3,3 +3,4 @@ soundfile
 numpy
 pillow>=10
 edge-tts
+rembg[cpu]
