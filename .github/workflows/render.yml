@@ -28,6 +28,10 @@ jobs:
         if: steps.peek.outputs.count != '0'
         uses: actions/cache@v4
         with: { path: ~/.cache/huggingface, key: hf-omnivoice-v1 }
+      - name: Cache cutout model
+        if: steps.peek.outputs.count != '0'
+        uses: actions/cache@v4
+        with: { path: ~/.rembg, key: rembg-u2net-human-seg-v1 }
       - name: Python deps
         if: steps.peek.outputs.count != '0'
         run: |
