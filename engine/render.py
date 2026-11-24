@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance, ImageOps
 from .config import W, H, FPS, SR, FONT, BG, BRAND, C_NEON, C_HOT, C_GOLD, C_WHITE, C_BG
-from . import sfx, hero
+from . import sfx, hero, stinger
 import os
 
 # ---------- easing ----------
@@ -373,6 +373,10 @@ def render(job, workdir, tts_speak, tts_dur):
                            "-pix_fmt", "yuv420p", "-profile:v", "high", "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
                            "-movflags", "+faststart", "-shortest", str(out)], stdin=subprocess.PIPE)
     pick_hero(scenes, hash(job.get("slug", "")) % 2)
+    if os.environ.get("SG_STING") != "0":  # stinger wipe on alternate scene cuts (look='plain' blocks)
+        sd = hash(job.get("slug", "")) % 2
+        for i, sc in enumerate(scenes):
+            if i > 0 and sc.get("type") != "cta" and sc.get("look") != "plain" and (i + sd) % 2 == 0: sc["_sting"] = True
     for i, sc in enumerate(scenes):
         L = build_scene(sc)
         if sc.get("_hero"):
@@ -382,6 +386,10 @@ def render(job, workdir, tts_speak, tts_dur):
         nf = int(round(sc["_dur"] * FPS))
         for f in range(nf):
             tt = f / FPS
-            ff.stdin.write(draw_frame(sc, L, bgim, tt, sc["_dur"], starts[i] + tt, i, total).tobytes())
+            fr = draw_frame(sc, L, bgim, tt, sc["_dur"], starts[i] + tt, i, total)
+            if sc.get("_sting") and tt < stinger.STING:
+                try: fr = stinger.apply(fr.convert("RGB"), tt, i % 2 == 1)
+                except Exception: pass
+            ff.stdin.write(fr.tobytes())
     ff.stdin.close(); ff.wait()
     return {"video": str(out), "duration": round(total, 2), "tts": sorted(engines)}
